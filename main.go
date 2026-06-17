@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"bot.ciaokombucha.tv/Command"
 	"bot.ciaokombucha.tv/Listener"
 	"bot.ciaokombucha.tv/Utils"
 	"github.com/bwmarrin/discordgo"
@@ -15,6 +16,24 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+func RegisterCommand(cmd Utils.Command) {
+	Utils.Commands = append(Utils.Commands, cmd)
+}
+
+func LoadCommands(s *discordgo.Session) {
+	for _, cmd := range Utils.Commands {
+		_, err := s.ApplicationCommandCreate(s.State.User.ID, os.Getenv("GUILD_ID"), &discordgo.ApplicationCommand{
+			Name:                     cmd.Name(),
+			Description:              cmd.Description(),
+			DefaultMemberPermissions: cmd.Permissions(),
+		})
+		if err != nil {
+			fmt.Println("An error occured while attemping to register the command", cmd.Name(), ":", err)
+		}
+		fmt.Println("Command " + cmd.Name() + " est enregistrée.")
+	}
+}
 
 func main() {
 	err := godotenv.Load("./.env")
@@ -48,13 +67,13 @@ func main() {
 		author_id TEXT
 	);`
 
-
+	management_query := `CREATE TABLE IF NOT EXISTS management(
+		roles_message TEXT
+	);`
 
 	Utils.DB.Query(messages_query)
 	Utils.DB.Query(deleted_msg_query)
-
-
-
+	Utils.DB.Query(management_query)
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -62,31 +81,38 @@ func main() {
 		return
 	}
 
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildMembers
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessageReactions
 
-	dg.AddHandler(Listener.MessageUpdate)
-	dg.AddHandler(Listener.MessageCreate)
+	// Member Handler
 	dg.AddHandler(Listener.MemberUpdate)
 	dg.AddHandler(Listener.MemberUpdateTag)
 	dg.AddHandler(Listener.MemberBanned)
 	dg.AddHandler(Listener.MemberKicked)
-	dg.AddHandler(Listener.MessageDelete)
 	dg.AddHandler(Listener.MemberJoin)
 	dg.AddHandler(Listener.MemberQuit)
 
+	// Message Handler
+	dg.AddHandler(Listener.MessageUpdate)
+	dg.AddHandler(Listener.MessageCreate)
+	dg.AddHandler(Listener.MessageDelete)
+	dg.AddHandler(Listener.RolesReactionsAdd)
+	dg.AddHandler(Listener.RolesReactionsRemove)
+
+	// Command Manager
+	dg.AddHandler(Command.CommandManager)
+	RegisterCommand(&Command.Role{})
 
 	err = dg.Open()
 	if err != nil {
 		fmt.Println("An error occured while attemping to start the discord bot:", err)
 	}
 
-
 	fmt.Println("Ciao Kombucha, en ligne !")
+	LoadCommands(dg)
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 	dg.Close()
-
 
 }
