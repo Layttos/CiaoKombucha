@@ -92,6 +92,15 @@ func MemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
 		}
 	}
 
+	previousAvatar := m.BeforeUpdate.User.Avatar
+	newAvatar := m.Member.User.Avatar
+
+	if previousAvatar != newAvatar {
+		Utils.AlertChannelMembers(s, m.Member.User.ID,
+			":frame_photo: Changement d'avatar",
+			fmt.Sprintf("%s a changé d'avatar sur le serveur", getDisplayName(m.Member.Nick, m.User)))
+	}
+
 }
 
 func MemberBanned(s *discordgo.Session, m *discordgo.GuildBanAdd) {

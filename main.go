@@ -130,6 +130,7 @@ func main() {
 	dg.AddHandler(Command.CommandManager)
 
 	dg.AddHandler(Listener.LevelsMessageCreate)
+	dg.AddHandler(Listener.AntiBotListener)
 
 	RegisterCommand(&Command.Role{})
 	RegisterCommand(&Command.Levels{})
