@@ -47,9 +47,22 @@ func main() {
 		return
 	}
 
+	if os.Getenv("IS_DEV") == "true" {
+		token = os.Getenv("DISCORD_TOKEN_DEV")
+		fmt.Println("Running in development mode.")
+	}
+
 	fmt.Println("Connecting to local database...")
 	Utils.DB, err = sql.Open("sqlite", "./ciaokombucha.db")
 	if err != nil {
+		log.Fatal(err)
+	}
+	Utils.DB.SetMaxOpenConns(1)
+	Utils.DB.SetMaxIdleConns(1)
+	if _, err := Utils.DB.Exec(`PRAGMA journal_mode=WAL;`); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := Utils.DB.Exec(`PRAGMA busy_timeout=5000;`); err != nil {
 		log.Fatal(err)
 	}
 	defer Utils.DB.Close()
@@ -71,9 +84,24 @@ func main() {
 		roles_message TEXT
 	);`
 
-	Utils.DB.Query(messages_query)
-	Utils.DB.Query(deleted_msg_query)
-	Utils.DB.Query(management_query)
+	experience_query := `CREATE TABLE IF NOT EXISTS levels(
+		user_id TEXT PRIMARY KEY,
+		experience INTEGER,
+		level INTEGER
+	);`
+
+	if _, err := Utils.DB.Exec(messages_query); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := Utils.DB.Exec(deleted_msg_query); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := Utils.DB.Exec(management_query); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := Utils.DB.Exec(experience_query); err != nil {
+		log.Fatal(err)
+	}
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -100,7 +128,12 @@ func main() {
 
 	// Command Manager
 	dg.AddHandler(Command.CommandManager)
+
+	dg.AddHandler(Listener.LevelsMessageCreate)
+
 	RegisterCommand(&Command.Role{})
+	RegisterCommand(&Command.Levels{})
+	RegisterCommand(&Command.Leaderboard{})
 
 	err = dg.Open()
 	if err != nil {

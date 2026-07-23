@@ -10,14 +10,16 @@ import (
 )
 
 func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if strings.Compare("727939986175033346", m.Author.ID) > 0 {
-		query := `INSERT OR IGNORE INTO messages (id, channel_id, content, author_id) VALUES(?, ?, ?, ?);`
-		stmt, _ := Utils.DB.Prepare(query)
-		defer stmt.Close()
-		_, err := stmt.Exec(m.Message.ID, m.Message.ChannelID, m.Content, m.Author.ID)
-		if err != nil {
-			fmt.Println("An error occured when a user sent a message:", err)
-		}
+	if m.Author == nil || m.Author.Bot {
+		return
+	}
+
+	query := `INSERT OR IGNORE INTO messages (id, channel_id, content, author_id) VALUES(?, ?, ?, ?);`
+	stmt, _ := Utils.DB.Prepare(query)
+	defer stmt.Close()
+	_, err := stmt.Exec(m.Message.ID, m.Message.ChannelID, m.Content, m.Author.ID)
+	if err != nil {
+		fmt.Println("An error occured when a user sent a message:", err)
 	}
 }
 
@@ -46,6 +48,11 @@ func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 	_, err = stmt.Exec(m.Message.Content, m.Message.ID)
 	if err != nil {
 		fmt.Println("An error occured when the program attempted to update the message in the database:", err)
+		return
+	}
+
+	if strings.Compare(previous_content, m.Message.Content) == 0 {
+		return
 	}
 
 	user, _ := s.User(m.Author.ID)
@@ -104,10 +111,11 @@ func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 	query := `SELECT author_id, content FROM messages WHERE id = ?;`
 
 	stmt, err := Utils.DB.Prepare(query)
-	defer stmt.Close()
 	if err != nil {
 		fmt.Println("An error occured while attemping to delete the message from the database")
+		return
 	}
+	defer stmt.Close()
 	err = stmt.QueryRow(m.Message.ID).Scan(&author_id, &content)
 
 	delete_query := `DELETE FROM messages WHERE id = ?;`
@@ -117,12 +125,22 @@ func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 		fmt.Println("An error occured while attemping to delete the message from the database")
 	}
 
-	user, _ := s.User(author_id)
+	user, err := s.User(author_id)
+	if err != nil {
+		fmt.Println("An error occured while attemping to fetch the user information")
+		return
+	}
+
+	name := "@" + user.Username
+	if user.GlobalName != "" {
+		name = user.GlobalName + " (@" + user.Username + ")"
+	}
+
 	avatarURL := user.AvatarURL("")
 	embed := &discordgo.MessageEmbed{
 		Author: &discordgo.MessageEmbedAuthor{
 			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
+			Name:    name,
 		},
 		Title: ":speaking_head: Message supprimé",
 		Fields: []*discordgo.MessageEmbedField{

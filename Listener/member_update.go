@@ -27,6 +27,20 @@ func MemberQuit(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
 
 func MemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
 
+	if m == nil || m.Member == nil || m.Member.User == nil || m.BeforeUpdate == nil || m.BeforeUpdate.User == nil {
+		return
+	}
+
+	getDisplayName := func(nick string, user *discordgo.User) string {
+		if nick != "" {
+			return nick
+		}
+		if user.GlobalName != "" {
+			return user.GlobalName
+		}
+		return user.Username
+	}
+
 	if m.BeforeUpdate == nil {
 		if strings.Compare(m.Member.Nick, m.Member.User.GlobalName) != 0 {
 			Utils.AlertChannelMembers(s, m.Member.User.ID, ":arrow_up: Nouveau nickname", m.User.GlobalName+" a décidé de s'appeler `"+m.Member.Nick+"` sur le serveur")
@@ -35,61 +49,45 @@ func MemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
 	}
 
 	if strings.Compare(m.BeforeUpdate.Nick, m.Member.Nick) != 0 {
-		previousNick := m.BeforeUpdate.Nick
-		if strings.Compare(previousNick, "") == 0 {
-			previousNick = m.User.GlobalName
-		}
+		previousNick := getDisplayName(m.BeforeUpdate.Nick, m.User)
+		newNickname := getDisplayName(m.Member.Nick, m.User)
 
-		newNickname := m.Member.Nick
-
-		if strings.Compare(newNickname, "") == 0 {
-			newNickname = m.User.GlobalName
-		}
-
-		if strings.Compare(newNickname, m.Member.User.GlobalName) == 0 {
-			Utils.AlertChannelMembers(s, m.Member.User.ID, "<:cyprien:1516602309398761674> Réinitialisation du nickname", m.User.GlobalName+" a décidé de retirer son nickname sur le serveur\n `"+previousNick+"` -> `"+newNickname+"`")
-		} else {
-			Utils.AlertChannelMembers(s, m.Member.User.ID, ":arrow_up: Changement de nickname", m.User.GlobalName+" a changé de nickname sur le serveur\n `"+previousNick+"` -> `"+newNickname+"`")
+		if strings.Compare(previousNick, newNickname) != 0 {
+			if strings.Compare(m.Member.Nick, "") == 0 {
+				Utils.AlertChannelMembers(s, m.Member.User.ID,
+					"<:cyprien:1516602309398761674> Réinitialisation du nickname",
+					fmt.Sprintf("%s a décidé de retirer son nickname sur le serveur\n`%s` -> `%s`", m.User.GlobalName, previousNick, newNickname))
+			} else {
+				Utils.AlertChannelMembers(s, m.Member.User.ID,
+					":arrow_up: Changement de nickname",
+					fmt.Sprintf("%s a changé de nickname sur le serveur\n`%s` -> `%s`", m.User.GlobalName, previousNick, newNickname))
+			}
 		}
 
 	}
 
-	if m.BeforeUpdate.User.GlobalName != m.User.GlobalName {
+	if m.BeforeUpdate.User != nil && strings.Compare(m.BeforeUpdate.User.GlobalName, m.Member.User.GlobalName) != 0 {
 		Utils.AlertChannelMembers(s, m.Member.User.ID, ":pencil2: Changement de pseudo", m.User.GlobalName+" a changé de pseudo\n `"+m.BeforeUpdate.User.GlobalName+"` -> `"+m.User.GlobalName+"`")
 	}
 
-	hasLostRole := false
-	for _, role := range m.BeforeUpdate.Roles {
-		if !slices.Contains(m.Member.Roles, role) {
-			hasLostRole = true
-			break
-		}
-	}
-
-	hasGainedRole := false
-	for _, role := range m.Member.Roles {
-		if !slices.Contains(m.BeforeUpdate.Roles, role) {
-			hasGainedRole = true
-			break
-		}
-	}
-
-	if hasLostRole {
-		for _, role := range m.BeforeUpdate.Roles {
-			role1, err := s.GuildRole(m.GuildID, role)
-			if err == nil && role1 != nil && !slices.Contains(m.Member.Roles, role) {
-				Utils.AlertChannelMembers(s, m.Member.User.ID, ":8ball: Perte de rôle", "Le membre "+m.Member.User.GlobalName+" vient de perdre le rôle "+role1.Mention())
-				break
+	for _, roleID := range m.BeforeUpdate.Roles {
+		if !slices.Contains(m.Member.Roles, roleID) {
+			role, err := s.GuildRole(m.GuildID, roleID)
+			if err == nil && role != nil {
+				Utils.AlertChannelMembers(s, m.Member.User.ID,
+					":8ball: Perte de rôle",
+					fmt.Sprintf("Le membre %s vient de perdre le rôle %s", getDisplayName(m.Member.Nick, m.User), role.Mention()))
 			}
 		}
 	}
 
-	if hasGainedRole {
-		for _, role := range m.Member.Roles {
-			role1, err := s.GuildRole(m.GuildID, role)
-			if err == nil && role1 != nil && !slices.Contains(m.BeforeUpdate.Roles, role) {
-				Utils.AlertChannelMembers(s, m.Member.User.ID, ":balloon: Obtention de rôle", "Le membre "+m.Member.User.GlobalName+" vient d'obtenir le rôle "+role1.Mention())
-				break
+	for _, roleID := range m.Member.Roles {
+		if !slices.Contains(m.BeforeUpdate.Roles, roleID) {
+			role, err := s.GuildRole(m.GuildID, roleID)
+			if err == nil && role != nil {
+				Utils.AlertChannelMembers(s, m.Member.User.ID,
+					":balloon: Obtention de rôle",
+					fmt.Sprintf("Le membre %s vient d'obtenir le rôle %s", getDisplayName(m.Member.Nick, m.User), role.Mention()))
 			}
 		}
 	}
