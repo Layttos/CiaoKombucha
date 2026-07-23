@@ -70,7 +70,7 @@ func GenerateRankCard(displayName string, username string, avatarURL string, lev
 	const height = 200
 
 	dc := gg.NewContext(width, height)
-	if err := dc.LoadFontFace("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 20); err != nil {
+	if err := dc.LoadFontFace("fonts/Arial Bold.ttf", 20); err != nil {
 		return nil, err
 	}
 
