@@ -21,6 +21,10 @@ func (c *Role) Permissions() *int64 {
 	return &permissions
 }
 
+func (c *Role) Options() []*discordgo.ApplicationCommandOption {
+	return nil
+}
+
 func (c *Role) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
 
 	s.ChannelMessageSendEmbed(i.ChannelID, &discordgo.MessageEmbed{

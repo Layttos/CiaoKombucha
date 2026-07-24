@@ -7,6 +7,7 @@ type Command interface {
 	Description() string
 
 	Permissions() *int64
+	Options() []*discordgo.ApplicationCommandOption
 	Execute(s *discordgo.Session, i *discordgo.InteractionCreate) bool
 }
 

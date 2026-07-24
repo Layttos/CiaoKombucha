@@ -24,6 +24,10 @@ func (c *Leaderboard) Permissions() *int64 {
 	return nil
 }
 
+func (c *Leaderboard) Options() []*discordgo.ApplicationCommandOption {
+	return nil
+}
+
 // LeaderboardEntry représente les données nécessaires pour un joueur du classement
 type LeaderboardEntry struct {
 	User  *discordgo.User

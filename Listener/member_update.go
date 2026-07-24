@@ -31,6 +31,10 @@ func MemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
 		return
 	}
 
+	if strings.Compare(m.User.ID, "356268235697553409") == 0 { // Blocage de fmbot parce qu'il fait QUE de changer de photo de profil c'en est insupportable de se faire spammer
+		return
+	}
+
 	getDisplayName := func(nick string, user *discordgo.User) string {
 		if nick != "" {
 			return nick

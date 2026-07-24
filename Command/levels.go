@@ -26,6 +26,10 @@ func (c *Levels) Permissions() *int64 {
 	return nil
 }
 
+func (c *Levels) Options() []*discordgo.ApplicationCommandOption {
+	return nil
+}
+
 func (c *Levels) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
 	user := i.Member.User
 	avatarURL := user.AvatarURL("")
@@ -101,7 +105,7 @@ func GenerateRankCard(displayName string, username string, avatarURL string, lev
 	levelStr := fmt.Sprintf("Niveau %d", level)
 	xpStr := fmt.Sprintf("%d / %d XP", currentXP, maxXP)
 
-	if err := dc.LoadFontFace("/System/Library/Fonts/Supplemental/Arial.ttf", 14); err != nil {
+	if err := dc.LoadFontFace("fonts/Arial.ttf", 14); err != nil {
 		return nil, err
 	}
 	dc.SetHexColor("#B9BBBE")

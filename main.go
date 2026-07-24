@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -10,8 +11,12 @@ import (
 
 	"bot.ciaokombucha.tv/Command"
 	"bot.ciaokombucha.tv/Listener"
+	"bot.ciaokombucha.tv/Radio"
 	"bot.ciaokombucha.tv/Utils"
 	"github.com/bwmarrin/discordgo"
+	"github.com/disgoorg/disgolink/v3/disgolink"
+	"github.com/disgoorg/disgolink/v3/lavalink"
+	"github.com/disgoorg/snowflake/v2"
 	"github.com/joho/godotenv"
 
 	_ "modernc.org/sqlite"
@@ -27,12 +32,17 @@ func LoadCommands(s *discordgo.Session) {
 			Name:                     cmd.Name(),
 			Description:              cmd.Description(),
 			DefaultMemberPermissions: cmd.Permissions(),
+			Options:                  cmd.Options(),
 		})
 		if err != nil {
 			fmt.Println("An error occured while attemping to register the command", cmd.Name(), ":", err)
 		}
 		fmt.Println("Command " + cmd.Name() + " est enregistrée.")
 	}
+}
+
+func ConnectToRadioChannel(s *discordgo.Session) {
+	Radio.ConnectToRadioChannel(s)
 }
 
 func main() {
@@ -109,7 +119,8 @@ func main() {
 		return
 	}
 
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessageReactions
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessageReactions | discordgo.IntentsGuilds | discordgo.IntentsGuildVoiceStates
+	dg.State.TrackVoice = true
 
 	// Member Handler
 	dg.AddHandler(Listener.MemberUpdate)
@@ -135,14 +146,61 @@ func main() {
 	RegisterCommand(&Command.Role{})
 	RegisterCommand(&Command.Levels{})
 	RegisterCommand(&Command.Leaderboard{})
+	RegisterCommand(&Command.RadioSearch{})
 
 	err = dg.Open()
 	if err != nil {
 		fmt.Println("An error occured while attemping to start the discord bot:", err)
 	}
 
+	/*  ==== LAVALINK ==== */
+	Radio.Link = disgolink.New(snowflake.MustParse(dg.State.User.ID), disgolink.WithListenerFunc(func(player disgolink.Player, event lavalink.Event) {
+		switch e := event.(type) {
+		case lavalink.TrackEndEvent:
+			if e.Reason == lavalink.TrackEndReasonFinished {
+				fmt.Println("Track finished playing. Attempting to play the next track...")
+				go ConnectToRadioChannel(dg)
+			}
+		}
+	}),
+	)
+
+	_, err = Radio.Link.AddNode(context.TODO(), disgolink.NodeConfig{
+		Name:     "local-node",
+		Address:  "127.0.0.1:2333",
+		Password: os.Getenv("LAVALINK_PASSWORD"),
+		Secure:   false,
+	})
+	if err != nil {
+		fmt.Println("An error occured while attemping to connect to the Lavalink node:", err)
+		return
+	}
+
+	dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceServerUpdate) {
+		Radio.Link.OnVoiceServerUpdate(context.TODO(), snowflake.MustParse(e.GuildID), e.Token, e.Endpoint)
+	})
+
+	// 2. Forwards your Bot's Voice Session ID to Lavalink
+	dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceStateUpdate) {
+		// Only forward updates for our own bot
+		if e.UserID != s.State.User.ID {
+			return
+		}
+
+		var channelID *snowflake.ID
+		if e.ChannelID != "" {
+			id := snowflake.MustParse(e.ChannelID)
+			channelID = &id
+		}
+
+		Radio.Link.OnVoiceStateUpdate(context.TODO(), snowflake.MustParse(e.GuildID), channelID, e.SessionID)
+	})
+
+	/*  ==== LAVALINK ==== */
+
 	fmt.Println("Ciao Kombucha, en ligne !")
 	LoadCommands(dg)
+	ConnectToRadioChannel(dg)
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
