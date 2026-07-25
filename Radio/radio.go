@@ -120,7 +120,6 @@ func ChangeCurrentTrack(query string) error {
 		fmt.Println("Track now playing!")
 
 	case lavalink.Exception:
-		fmt.Println("Lavalink error loading track:", data.Message)
 		return fmt.Errorf("An error occured while attemping to load a track via lavalink: %s", data.Message)
 
 	default:
