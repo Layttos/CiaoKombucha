@@ -206,22 +206,30 @@ func main() {
 	/* ==== TEANO DAILY ==== */
 
 	if os.Getenv("ENABLE_TEANO_DAILY") == "true" {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for _ = range ticker.C {
-			now := time.Now()
-			first := time.Date(2026, 07, 29, 0, 0, 0, 0, now.Location())
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-			var count int
-			if first.Equal(today) {
-				count = 1
-			} else {
-				count = int(today.Sub(first).Hours() / 24)
-			}
-			msg := "Teano daily #" + fmt.Sprint(count)
-			dg.ChannelMessageSend("1442243971827896421", msg)
+		go func() {
+			sendDaily := func() {
+				now := time.Now()
+				first := time.Date(2026, 7, 29, 0, 0, 0, 0, now.Location())
+				today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+				count := int(today.Sub(first).Hours()/24) + 1
+				if count < 1 {
+					count = 1
+				}
 
-		}
+				msg := "Teano daily #" + fmt.Sprint(count)
+				if _, err := dg.ChannelMessageSend("1442243971827896421", msg); err != nil {
+					log.Println("failed to send Teano daily message:", err)
+				}
+			}
+
+			sendDaily()
+
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				sendDaily()
+			}
+		}()
 	}
 
 	sc := make(chan os.Signal, 1)
