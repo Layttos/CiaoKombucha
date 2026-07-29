@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"bot.ciaokombucha.tv/Command"
 	"bot.ciaokombucha.tv/Listener"
@@ -201,6 +202,27 @@ func main() {
 	fmt.Println("Ciao Kombucha, en ligne !")
 	LoadCommands(dg)
 	ConnectToRadioChannel(dg)
+
+	/* ==== TEANO DAILY ==== */
+
+	if os.Getenv("ENABLE_TEANO_DAILY") == "true" {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for _ = range ticker.C {
+			now := time.Now()
+			first := time.Date(2026, 07, 29, 0, 0, 0, 0, now.Location())
+			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			var count int
+			if first.Equal(today) {
+				count = 1
+			} else {
+				count = int(today.Sub(first).Hours() / 24)
+			}
+			msg := "Teano daily #" + fmt.Sprint(count)
+			dg.ChannelMessageSend("1442243971827896421", msg)
+
+		}
+	}
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
