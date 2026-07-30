@@ -27,11 +27,35 @@ func (c *Levels) Permissions() *int64 {
 }
 
 func (c *Levels) Options() []*discordgo.ApplicationCommandOption {
-	return nil
+	return []*discordgo.ApplicationCommandOption{
+		{
+			Type:        discordgo.ApplicationCommandOptionUser,
+			Name:        "utilisateur",
+			Description: "L'utilisateur dont vous voulez voir le niveau.",
+			Required:    false,
+		},
+	}
 }
 
 func (c *Levels) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
-	user := i.Member.User
+	var user *discordgo.User
+	if len(i.ApplicationCommandData().Options) > 0 {
+		user = i.ApplicationCommandData().Options[0].UserValue(s)
+	} else {
+		user = i.Member.User
+	}
+
+	if user == nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Impossible de récupérer l'utilisateur.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return false
+	}
+
 	avatarURL := user.AvatarURL("")
 	displayName := user.GlobalName
 	if displayName == "" {

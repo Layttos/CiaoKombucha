@@ -1,6 +1,9 @@
 package Utils
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -66,3 +69,67 @@ func GetRequiredExperienceForNextLevel(user_id string) int {
 
 	return GetRequiredExperienceForLevel(current_level+1) - current_experience
 }
+
+func AddExperienceToUser(user_id string, s *discordgo.Session) error {
+	_, level := GetUserLevel(user_id)
+	var added_experience int
+	if level < 5 {
+		added_experience = 20
+	} else if level < 10 {
+		added_experience = 50
+	} else {
+		added_experience = 100
+	}
+
+	update_query := `UPDATE levels SET experience=experience+? WHERE user_id=?;`
+	stmt, _ := DB.Prepare(update_query)
+	defer stmt.Close()
+	_, err := stmt.Exec(added_experience, user_id)
+	if err != nil {
+		return err
+	}
+
+	if GetRequiredExperienceForNextLevel(user_id) <= 0 {
+		update_query := `UPDATE levels SET level=level+1 WHERE user_id=?;`
+		_, current_level := GetUserLevel(user_id)
+		stmt, _ := DB.Prepare(update_query)
+		defer stmt.Close()
+		_, err = stmt.Exec(user_id)
+		if err != nil {
+			return err
+		}
+		if strings.Compare(user_id, "386468470788980738") == 0 || strings.Compare(user_id, "550412509719298049") == 0 || strings.Compare(user_id, "584752863457050624") == 0 {
+			AlertLevelsChannel(s, user_id, ":tada: Toutes mes félicitations !", fmt.Sprintf("Le dictateur <@%s> a atteint le niveau %d", user_id, current_level+1))
+		} else {
+			AlertLevelsChannel(s, user_id, ":tada: Félicitations !", fmt.Sprintf("<@%s> a atteint le niveau %d !", user_id, current_level+1))
+		}
+	}
+
+	return nil
+}
+
+/*required_experience := Utils.GetRequiredExperienceForNextLevel(user_id)
+
+if required_experience > 0 {
+	update_query := `UPDATE levels SET experience=experience+20 WHERE user_id=?;`
+	stmt, _ := Utils.DB.Prepare(update_query)
+	defer stmt.Close()
+	_, err = stmt.Exec(user_id)
+	if err != nil {
+		return
+	}
+	if current_experience+20 >= Utils.GetRequiredExperienceForLevel(current_level+1) {
+		update_query := `UPDATE levels SET level=level+1 WHERE user_id=?;`
+		stmt, _ := Utils.DB.Prepare(update_query)
+		defer stmt.Close()
+		_, err = stmt.Exec(user_id)
+		if err != nil {
+			return
+		}
+		if strings.Compare(user_id, "386468470788980738") == 0 || strings.Compare(user_id, "550412509719298049") == 0 || strings.Compare(user_id, "584752863457050624") == 0 {
+			Utils.AlertLevelsChannel(s, user_id, ":tada: Toutes mes félicitations !", fmt.Sprintf("Le dictateur <@%s> a atteint le niveau %d", user_id, current_level+1))
+		} else {
+			Utils.AlertLevelsChannel(s, user_id, ":tada: Félicitations !", fmt.Sprintf("<@%s> a atteint le niveau %d !", user_id, current_level+1))
+		}
+	}
+}*/

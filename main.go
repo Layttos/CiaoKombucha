@@ -101,6 +101,12 @@ func main() {
 		level INTEGER
 	);`
 
+	citations_query := `CREATE TABLE IF NOT EXISTS citations(
+		id TEXT PRIMARY KEY,
+		citation TEXT,
+		author TEXT
+	);`
+
 	if _, err := Utils.DB.Exec(messages_query); err != nil {
 		log.Fatal(err)
 	}
@@ -111,6 +117,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if _, err := Utils.DB.Exec(experience_query); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := Utils.DB.Exec(citations_query); err != nil {
 		log.Fatal(err)
 	}
 
@@ -147,7 +156,9 @@ func main() {
 	RegisterCommand(&Command.Role{})
 	RegisterCommand(&Command.Levels{})
 	RegisterCommand(&Command.Leaderboard{})
-	RegisterCommand(&Command.RadioSearch{})
+	if os.Getenv("ENABLE_RADIO") == "true" {
+		RegisterCommand(&Command.RadioSearch{})
+	}
 
 	err = dg.Open()
 	if err != nil {
@@ -155,53 +166,56 @@ func main() {
 	}
 
 	/*  ==== LAVALINK ==== */
-	Radio.Link = disgolink.New(snowflake.MustParse(dg.State.User.ID), disgolink.WithListenerFunc(func(player disgolink.Player, event lavalink.Event) {
-		switch e := event.(type) {
-		case lavalink.TrackEndEvent:
-			if e.Reason == lavalink.TrackEndReasonFinished {
-				fmt.Println("Track finished playing. Attempting to play the next track...")
-				go ConnectToRadioChannel(dg)
+	if os.Getenv("ENABLE_RADIO") == "true" {
+		Radio.Link = disgolink.New(snowflake.MustParse(dg.State.User.ID), disgolink.WithListenerFunc(func(player disgolink.Player, event lavalink.Event) {
+			switch e := event.(type) {
+			case lavalink.TrackEndEvent:
+				if e.Reason == lavalink.TrackEndReasonFinished {
+					fmt.Println("Track finished playing. Attempting to play the next track...")
+					go ConnectToRadioChannel(dg)
+				}
 			}
-		}
-	}),
-	)
+		}),
+		)
 
-	_, err = Radio.Link.AddNode(context.TODO(), disgolink.NodeConfig{
-		Name:     "local-node",
-		Address:  "127.0.0.1:2333",
-		Password: os.Getenv("LAVALINK_PASSWORD"),
-		Secure:   false,
-	})
-	if err != nil {
-		fmt.Println("An error occured while attemping to connect to the Lavalink node:", err)
-		return
-	}
-
-	dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceServerUpdate) {
-		Radio.Link.OnVoiceServerUpdate(context.TODO(), snowflake.MustParse(e.GuildID), e.Token, e.Endpoint)
-	})
-
-	// 2. Forwards your Bot's Voice Session ID to Lavalink
-	dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceStateUpdate) {
-		// Only forward updates for our own bot
-		if e.UserID != s.State.User.ID {
+		_, err = Radio.Link.AddNode(context.TODO(), disgolink.NodeConfig{
+			Name:     "local-node",
+			Address:  "127.0.0.1:2333",
+			Password: os.Getenv("LAVALINK_PASSWORD"),
+			Secure:   false,
+		})
+		if err != nil {
+			fmt.Println("An error occured while attemping to connect to the Lavalink node:", err)
 			return
 		}
 
-		var channelID *snowflake.ID
-		if e.ChannelID != "" {
-			id := snowflake.MustParse(e.ChannelID)
-			channelID = &id
-		}
+		dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceServerUpdate) {
+			Radio.Link.OnVoiceServerUpdate(context.TODO(), snowflake.MustParse(e.GuildID), e.Token, e.Endpoint)
+		})
 
-		Radio.Link.OnVoiceStateUpdate(context.TODO(), snowflake.MustParse(e.GuildID), channelID, e.SessionID)
-	})
+		// 2. Forwards your Bot's Voice Session ID to Lavalink
+		dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceStateUpdate) {
+			// Only forward updates for our own bot
+			if e.UserID != s.State.User.ID {
+				return
+			}
 
+			var channelID *snowflake.ID
+			if e.ChannelID != "" {
+				id := snowflake.MustParse(e.ChannelID)
+				channelID = &id
+			}
+
+			Radio.Link.OnVoiceStateUpdate(context.TODO(), snowflake.MustParse(e.GuildID), channelID, e.SessionID)
+		})
+	}
 	/*  ==== LAVALINK ==== */
 
 	fmt.Println("Ciao Kombucha, en ligne !")
 	LoadCommands(dg)
-	ConnectToRadioChannel(dg)
+	if os.Getenv("ENABLE_RADIO") == "true" {
+		ConnectToRadioChannel(dg)
+	}
 
 	/* ==== TEANO DAILY ==== */
 
@@ -217,7 +231,7 @@ func main() {
 				}
 
 				msg := "Teano daily #" + fmt.Sprint(count)
-				if _, err := dg.ChannelMessageSend("1442243971827896421", msg); err != nil {
+				if _, err := dg.ChannelMessageSend("1442243974311182358", msg); err != nil {
 					log.Println("failed to send Teano daily message:", err)
 				}
 			}

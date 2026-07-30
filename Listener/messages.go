@@ -93,17 +93,22 @@ func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 
 	deleted_by := "Non Spécifié(e)"
-	auditLog, err := s.GuildAuditLog(m.GuildID, "", "", 72 /* cf -> discordgo.AuditLogActionMessageDelete */, 1)
+	auditLog, err := s.GuildAuditLog(m.GuildID, "", "", 0 /* 0 pour récupérer simplement la dernière log sinon ça bug */, 1)
 	if err != nil {
 		fmt.Println("An error occured while trying to fetch some data information on a message suppression")
 	}
 
 	if len(auditLog.AuditLogEntries) > 0 {
 		entry := auditLog.AuditLogEntries[0]
-		if entry.UserID != "" {
-			usr, _ := s.User(entry.UserID)
-			deleted_by = usr.GlobalName
+		var user *discordgo.User
+		if entry.ActionType != nil && *entry.ActionType != discordgo.AuditLogActionMessageDelete {
+			user, _ = s.User(entry.UserID)
+		} else {
+			if entry.UserID != "" {
+				user, _ = s.User(entry.UserID)
+			}
 		}
+		deleted_by = user.GlobalName
 	}
 
 	var author_id, content string
