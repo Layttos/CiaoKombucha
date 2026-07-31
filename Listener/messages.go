@@ -92,25 +92,6 @@ func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 
 func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 
-	deleted_by := "Non Spécifié(e)"
-	auditLog, err := s.GuildAuditLog(m.GuildID, "", "", 0 /* 0 pour récupérer simplement la dernière log sinon ça bug */, 1)
-	if err != nil {
-		fmt.Println("An error occured while trying to fetch some data information on a message suppression")
-	}
-
-	if len(auditLog.AuditLogEntries) > 0 {
-		entry := auditLog.AuditLogEntries[0]
-		var user *discordgo.User
-		if entry.ActionType != nil && *entry.ActionType != discordgo.AuditLogActionMessageDelete {
-			user, _ = s.User(entry.UserID)
-		} else {
-			if entry.UserID != "" {
-				user, _ = s.User(entry.UserID)
-			}
-		}
-		deleted_by = user.GlobalName
-	}
-
 	var author_id, content string
 
 	query := `SELECT author_id, content FROM messages WHERE id = ?;`
@@ -122,6 +103,37 @@ func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 	}
 	defer stmt.Close()
 	err = stmt.QueryRow(m.Message.ID).Scan(&author_id, &content)
+
+	time.Sleep(500 * time.Millisecond)
+
+	var deleted_by string
+
+	auditLog, err := s.GuildAuditLog(m.GuildID, "", "", 72 /* cf -> discordgo.AuditLogActionMessageDelete */, 1)
+	if err != nil {
+		fmt.Println("An error occured while trying to fetch audit logs:", err)
+	}
+
+	var is_self_delete bool = true
+
+	if auditLog != nil && len(auditLog.AuditLogEntries) > 0 {
+		entry := auditLog.AuditLogEntries[0]
+
+		if entry.ActionType != nil && *entry.ActionType == discordgo.AuditLogActionMessageDelete {
+
+			if entry.TargetID == author_id && entry.Options != nil && entry.Options.ChannelID == m.ChannelID {
+				logTime, _ := discordgo.SnowflakeTimestamp(entry.ID)
+
+				if time.Since(logTime) < 5*time.Second {
+					is_self_delete = false
+					deleted_by = "<@" + entry.UserID + ">"
+				}
+			}
+		}
+	}
+
+	if is_self_delete {
+		deleted_by = "<@" + author_id + ">"
+	}
 
 	delete_query := `DELETE FROM messages WHERE id = ?;`
 
