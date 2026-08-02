@@ -152,10 +152,13 @@ func main() {
 
 	dg.AddHandler(Listener.LevelsMessageCreate)
 	dg.AddHandler(Listener.AntiBotListener)
+	dg.AddHandler(Listener.EmailBotJoin)
 
 	RegisterCommand(&Command.Role{})
 	RegisterCommand(&Command.Levels{})
 	RegisterCommand(&Command.Leaderboard{})
+	RegisterCommand(&Command.Snipe{})
+	RegisterCommand(&Command.Say{})
 	if os.Getenv("ENABLE_RADIO") == "true" {
 		RegisterCommand(&Command.RadioSearch{})
 	}

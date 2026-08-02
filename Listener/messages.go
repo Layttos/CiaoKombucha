@@ -192,4 +192,12 @@ func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 
 	Utils.AlertChannelMessagesComplex(s, embed)
 
+	/* Ajout dans la liste des messages supprimés APRÈS l'envoi du message */
+
+	add_query := `INSERT INTO deleted_messages (channel_id, message, author_id) VALUES(?, ?, ?) ON CONFLICT DO UPDATE SET message = EXCLUDED.message, author_id = EXCLUDED.author_id;`
+	_, err = Utils.DB.Exec(add_query, m.ChannelID, content, author_id)
+	if err != nil {
+		fmt.Println("An error occured while attemping to add the message to the deleted messages list:", err)
+	}
+
 }
