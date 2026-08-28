@@ -6,6 +6,10 @@ import (
 )
 
 func LevelsMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if m.Author == nil || m.Author.Bot {
+		return
+	}
+
 	user_id := m.Author.ID
 	current_level, current_experience := 0, 0
 	query := `SELECT level, experience FROM levels WHERE user_id=?`

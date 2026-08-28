@@ -2,7 +2,10 @@ package Utils
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -48,88 +51,123 @@ func GetUserLevel(userID string) (int, int) {
 	return experience, level
 }
 
+// ---------------------------------------------------------------------------
+// Courbe de progression
+//
+// XP nécessaires pour passer du niveau n au niveau n+1 : 5n² + 50n + 100.
+// C'est la courbe quadratique éprouvée (type MEE6) : les premiers niveaux
+// tombent en quelques messages, les suivants demandent de plus en plus
+// d'activité, sans jamais devenir hors d'atteinte.
+//
+//	niveau  1  ->        100 XP cumulés
+//	niveau  5  ->      1 400 XP cumulés
+//	niveau 10 ->      6 400 XP cumulés
+//	niveau 20 ->     35 800 XP cumulés
+//	niveau 50 ->    475 500 XP cumulés
+// ---------------------------------------------------------------------------
+
+// xpToNextLevel renvoie les XP à gagner entre le niveau `level` et `level+1`.
+func xpToNextLevel(level int) int {
+	if level < 0 {
+		level = 0
+	}
+	return 5*level*level + 50*level + 100
+}
+
+// GetRequiredExperienceForLevel renvoie le total d'XP cumulé nécessaire pour
+// atteindre `level` (niveau 0 = 0 XP).
 func GetRequiredExperienceForLevel(level int) int {
-	if level <= 10 {
-		return level * 1000
+	total := 0
+	for n := 0; n < level; n++ {
+		total += xpToNextLevel(n)
 	}
-	if level <= 15 {
-		delta := level - 10
-		return 10000 + (delta*delta)*2000
-	}
-	return 60000 + (level-15)*3000
+	return total
 }
 
+// GetLevelForExperience renvoie le niveau correspondant à un total d'XP.
+func GetLevelForExperience(experience int) int {
+	level := 0
+	for experience >= GetRequiredExperienceForLevel(level+1) {
+		level++
+	}
+	return level
+}
+
+// GetRequiredExperienceForNextLevel renvoie les XP restants avant le prochain
+// niveau pour un utilisateur.
 func GetRequiredExperienceForNextLevel(user_id string) int {
-	var current_level, current_experience int
-	query := `SELECT level, experience FROM levels WHERE user_id=?`
-	err := DB.QueryRow(query, user_id).Scan(&current_level, &current_experience)
-	if err != nil {
-		return 0
-	}
-
-	return GetRequiredExperienceForLevel(current_level+1) - current_experience
+	experience, _ := GetUserLevel(user_id)
+	level := GetLevelForExperience(experience)
+	return GetRequiredExperienceForLevel(level+1) - experience
 }
 
-func AddExperienceToUser(user_id string, s *discordgo.Session) error {
-	_, level := GetUserLevel(user_id)
-	var added_experience int
-	if level < 5 {
-		added_experience = 20
-	} else if level < 10 {
-		added_experience = 50
-	} else {
-		added_experience = 100
-	}
+// ---------------------------------------------------------------------------
+// Gain d'XP par message
+//
+// Chaque message rapporte un montant aléatoire (15–25 XP), au plus une fois
+// par minute et par membre. Le tirage aléatoire empêche de calculer au XP près
+// le nombre de messages restants, et le cooldown neutralise le spam.
+// ---------------------------------------------------------------------------
 
-	update_query := `UPDATE levels SET experience=experience+? WHERE user_id=?;`
-	stmt, _ := DB.Prepare(update_query)
-	defer stmt.Close()
-	_, err := stmt.Exec(added_experience, user_id)
+const (
+	xpMinPerMessage   = 15
+	xpMaxPerMessage   = 25
+	xpMessageCooldown = 60 * time.Second
+)
+
+var (
+	xpLastGrant   = map[string]time.Time{}
+	xpLastGrantMu sync.Mutex
+)
+
+// AddExperienceToUser attribue l'XP d'un message à son auteur (en respectant le
+// cooldown) puis synchronise le niveau stocké et annonce les montées de niveau.
+func AddExperienceToUser(user_id string, s *discordgo.Session) error {
+	xpLastGrantMu.Lock()
+	if last, ok := xpLastGrant[user_id]; ok && time.Since(last) < xpMessageCooldown {
+		xpLastGrantMu.Unlock()
+		return nil
+	}
+	xpLastGrant[user_id] = time.Now()
+	xpLastGrantMu.Unlock()
+
+	previous_experience, previous_level := GetUserLevel(user_id)
+
+	gain := xpMinPerMessage + rand.IntN(xpMaxPerMessage-xpMinPerMessage+1)
+	new_experience := previous_experience + gain
+
+	stmt, err := DB.Prepare(`UPDATE levels SET experience=? WHERE user_id=?;`)
 	if err != nil {
 		return err
 	}
+	defer stmt.Close()
+	if _, err := stmt.Exec(new_experience, user_id); err != nil {
+		return err
+	}
 
-	if GetRequiredExperienceForNextLevel(user_id) <= 0 {
-		update_query := `UPDATE levels SET level=level+1 WHERE user_id=?;`
-		_, current_level := GetUserLevel(user_id)
-		stmt, _ := DB.Prepare(update_query)
-		defer stmt.Close()
-		_, err = stmt.Exec(user_id)
-		if err != nil {
-			return err
-		}
-		if strings.Compare(user_id, "386468470788980738") == 0 || strings.Compare(user_id, "550412509719298049") == 0 || strings.Compare(user_id, "584752863457050624") == 0 {
-			AlertLevelsChannel(s, user_id, ":tada: Toutes mes félicitations !", fmt.Sprintf("Le dictateur <@%s> a atteint le niveau %d", user_id, current_level+1))
-		} else {
-			AlertLevelsChannel(s, user_id, ":tada: Félicitations !", fmt.Sprintf("<@%s> a atteint le niveau %d !", user_id, current_level+1))
-		}
+	new_level := GetLevelForExperience(new_experience)
+	if new_level == previous_level {
+		return nil
+	}
+
+	level_stmt, err := DB.Prepare(`UPDATE levels SET level=? WHERE user_id=?;`)
+	if err != nil {
+		return err
+	}
+	defer level_stmt.Close()
+	if _, err := level_stmt.Exec(new_level, user_id); err != nil {
+		return err
+	}
+
+	if new_level <= previous_level {
+		return nil
+	}
+
+	if strings.Compare(user_id, "386468470788980738") == 0 || strings.Compare(user_id, "550412509719298049") == 0 || strings.Compare(user_id, "584752863457050624") == 0 {
+		AlertLevelsChannel(s, user_id, ":tada: Toutes mes félicitations !", fmt.Sprintf("Le dictateur <@%s> a atteint le niveau %d", user_id, new_level))
+	} else {
+		AlertLevelsChannel(s, user_id, ":tada: Félicitations !", fmt.Sprintf("<@%s> a atteint le niveau %d !", user_id, new_level))
 	}
 
 	return nil
 }
-
-/*required_experience := Utils.GetRequiredExperienceForNextLevel(user_id)
-
-if required_experience > 0 {
-	update_query := `UPDATE levels SET experience=experience+20 WHERE user_id=?;`
-	stmt, _ := Utils.DB.Prepare(update_query)
-	defer stmt.Close()
-	_, err = stmt.Exec(user_id)
-	if err != nil {
-		return
-	}
-	if current_experience+20 >= Utils.GetRequiredExperienceForLevel(current_level+1) {
-		update_query := `UPDATE levels SET level=level+1 WHERE user_id=?;`
-		stmt, _ := Utils.DB.Prepare(update_query)
-		defer stmt.Close()
-		_, err = stmt.Exec(user_id)
-		if err != nil {
-			return
-		}
-		if strings.Compare(user_id, "386468470788980738") == 0 || strings.Compare(user_id, "550412509719298049") == 0 || strings.Compare(user_id, "584752863457050624") == 0 {
-			Utils.AlertLevelsChannel(s, user_id, ":tada: Toutes mes félicitations !", fmt.Sprintf("Le dictateur <@%s> a atteint le niveau %d", user_id, current_level+1))
-		} else {
-			Utils.AlertLevelsChannel(s, user_id, ":tada: Félicitations !", fmt.Sprintf("<@%s> a atteint le niveau %d !", user_id, current_level+1))
-		}
-	}
-}*/
