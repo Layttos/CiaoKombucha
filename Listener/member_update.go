@@ -105,6 +105,77 @@ func MemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
 			fmt.Sprintf("%s a changé d'avatar sur le serveur", getDisplayName(m.Member.Nick, m.User)))
 	}
 
+	handleTimeoutChange(s, m)
+
+}
+
+// timeoutActive indique si une date d'exclusion temporaire est encore en cours.
+func timeoutActive(t *time.Time) bool {
+	return t != nil && t.After(time.Now())
+}
+
+// handleTimeoutChange détecte l'application, la levée ou la modification d'une
+// exclusion temporaire (timeout) sur un membre.
+func handleTimeoutChange(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
+	before := m.BeforeUpdate.CommunicationDisabledUntil
+	after := m.Member.CommunicationDisabledUntil
+
+	wasActive := timeoutActive(before)
+	isActive := timeoutActive(after)
+
+	if wasActive == isActive && (!isActive || before.Equal(*after)) {
+		return
+	}
+
+	actorID, reason := Utils.ResolveAuditActor(s, m.GuildID, 24 /* cf -> discordgo.AuditLogActionMemberUpdate */, m.User.ID)
+
+	var title string
+	var color int
+	fields := []*discordgo.MessageEmbedField{
+		{Name: "Membre", Value: m.User.Mention(), Inline: true},
+		{Name: "Modérateur", Value: Utils.ActorMention(actorID), Inline: true},
+		{Name: "Raison", Value: Utils.ReasonOrDefault(reason), Inline: true},
+	}
+
+	switch {
+	case !wasActive && isActive:
+		title = ":mute: Exclusion temporaire"
+		color = Utils.ColorModerationTimeout
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  "Jusqu'au",
+			Value: fmt.Sprintf("<t:%d:F> (<t:%d:R>)", after.Unix(), after.Unix()),
+		})
+	case wasActive && !isActive:
+		title = ":loud_sound: Fin d'exclusion temporaire"
+		color = Utils.ColorModerationLift
+	default:
+		title = ":mute: Exclusion temporaire modifiée"
+		color = Utils.ColorModerationTimeout
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  "Jusqu'au",
+			Value: fmt.Sprintf("<t:%d:F> (<t:%d:R>)", after.Unix(), after.Unix()),
+		})
+	}
+
+	name := "@" + m.User.Username
+	if m.User.GlobalName != "" {
+		name = m.User.GlobalName + " (@" + m.User.Username + ")"
+	}
+
+	Utils.AlertChannelModerationComplex(s, &discordgo.MessageEmbed{
+		Author: &discordgo.MessageEmbedAuthor{
+			IconURL: m.User.AvatarURL(""),
+			Name:    name,
+		},
+		Title:  title,
+		Fields: fields,
+		Color:  color,
+		Footer: &discordgo.MessageEmbedFooter{
+			Text:    "Layttos Industries© - Tous droits réservés.",
+			IconURL: "https://cdn.discordapp.com/avatars/727939986175033346/3ef68283b237e83f6cb4b6815b96ab0f.png",
+		},
+		Timestamp: time.Now().Format(time.RFC3339),
+	})
 }
 
 func MemberBanned(s *discordgo.Session, m *discordgo.GuildBanAdd) {

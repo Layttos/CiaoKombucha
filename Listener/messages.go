@@ -90,6 +90,36 @@ func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 
 }
 
+func MessageDeleteBulk(s *discordgo.Session, m *discordgo.MessageDeleteBulk) {
+	actorID, reason := Utils.ResolveAuditActor(s, m.GuildID, 73 /* cf -> discordgo.AuditLogActionMessageBulkDelete */, "")
+
+	// Nettoyage des messages concernés dans la base locale.
+	for _, id := range m.Messages {
+		if _, err := Utils.DB.Exec(`DELETE FROM messages WHERE id = ?;`, id); err != nil {
+			fmt.Println("An error occured while attempting to delete a bulk-removed message from the database:", err)
+		}
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Author: Utils.ActorEmbedAuthor(s, actorID),
+		Title:  ":wastebasket: Suppression groupée de messages",
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Nombre", Value: fmt.Sprintf("%d messages", len(m.Messages)), Inline: true},
+			{Name: "Channel", Value: "<#" + m.ChannelID + ">", Inline: true},
+			{Name: "Par", Value: Utils.ActorMention(actorID), Inline: true},
+			{Name: "Raison", Value: Utils.ReasonOrDefault(reason), Inline: true},
+		},
+		Color: 0x4A5B85,
+		Footer: &discordgo.MessageEmbedFooter{
+			Text:    "Layttos Industries© - Tous droits réservés.",
+			IconURL: "https://cdn.discordapp.com/avatars/727939986175033346/3ef68283b237e83f6cb4b6815b96ab0f.png",
+		},
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	Utils.AlertChannelMessagesComplex(s, embed)
+}
+
 func MessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 
 	var author_id, content string

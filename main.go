@@ -129,7 +129,7 @@ func main() {
 		return
 	}
 
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessageReactions | discordgo.IntentsGuilds | discordgo.IntentsGuildVoiceStates
+	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessageReactions | discordgo.IntentsGuilds | discordgo.IntentsGuildVoiceStates | discordgo.IntentsGuildBans | discordgo.IntentsGuildEmojis | discordgo.IntentsGuildInvites | discordgo.IntentsGuildWebhooks
 	dg.State.TrackVoice = true
 
 	// Member Handler
@@ -144,8 +144,25 @@ func main() {
 	dg.AddHandler(Listener.MessageUpdate)
 	dg.AddHandler(Listener.MessageCreate)
 	dg.AddHandler(Listener.MessageDelete)
+	dg.AddHandler(Listener.MessageDeleteBulk)
 	dg.AddHandler(Listener.RolesReactionsAdd)
 	dg.AddHandler(Listener.RolesReactionsRemove)
+
+	// Server structure Handler (rôles, salons, fils, paramètres, webhooks, invitations, emojis)
+	dg.AddHandler(Listener.RoleCreated)
+	dg.AddHandler(Listener.RoleUpdated)
+	dg.AddHandler(Listener.RoleDeleted)
+	dg.AddHandler(Listener.ChannelCreated)
+	dg.AddHandler(Listener.ChannelUpdated)
+	dg.AddHandler(Listener.ChannelDeleted)
+	dg.AddHandler(Listener.ThreadCreated)
+	dg.AddHandler(Listener.ThreadDeleted)
+	dg.AddHandler(Listener.GuildUpdated)
+	dg.AddHandler(Listener.GuildEmojisUpdated)
+	dg.AddHandler(Listener.MemberUnbanned)
+	dg.AddHandler(Listener.WebhooksUpdated)
+	dg.AddHandler(Listener.InviteCreated)
+	dg.AddHandler(Listener.InviteDeleted)
 
 	// Command Manager
 	dg.AddHandler(Command.CommandManager)
