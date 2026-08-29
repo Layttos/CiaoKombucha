@@ -55,7 +55,27 @@ func ConnectToRadioChannel(s *discordgo.Session) error {
 	return ChangeCurrentTrack("")
 }
 
+// RequestedTrack représente un morceau résolu sur Navidrome, prêt à être joué.
+type RequestedTrack struct {
+	StreamURL   string
+	Title       string
+	Artist      string
+	RequestedBy string
+}
+
+// ChangeCurrentTrack résout la requête (ou un morceau aléatoire si query est
+// vide) et le joue immédiatement.
 func ChangeCurrentTrack(query string) error {
+	track, err := resolveTrack(query)
+	if err != nil {
+		return err
+	}
+	return playStreamURL(track.StreamURL)
+}
+
+// resolveTrack interroge Navidrome : si query est renseignée, renvoie le
+// premier résultat de recherche ; sinon un morceau aléatoire.
+func resolveTrack(query string) (*RequestedTrack, error) {
 	rawUrl := os.Getenv("NAVIDROME_URL")
 	rawUser := os.Getenv("NAVIDROME_USER")
 	password := os.Getenv("NAVIDROME_PASSWORD")
@@ -68,7 +88,7 @@ func ChangeCurrentTrack(query string) error {
 	}
 
 	if err := client.Authenticate(password); err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
 	var targetSong *subsonic.Child
@@ -78,17 +98,16 @@ func ChangeCurrentTrack(query string) error {
 		searchResult, err := client.Search3(query, parameters)
 
 		if err != nil || searchResult == nil || len(searchResult.Song) == 0 {
-			return fmt.Errorf("Search failed or returned no results for query: %s, Error: %w", query, err)
-		} else {
-			targetSong = searchResult.Song[0]
-			fmt.Println("Result found:", targetSong.Title, "by", targetSong.Artist)
+			return nil, fmt.Errorf("aucun résultat pour la recherche : %s", query)
 		}
+		targetSong = searchResult.Song[0]
+		fmt.Println("Result found:", targetSong.Title, "by", targetSong.Artist)
 	}
 
 	if targetSong == nil || targetSong.ID == "" {
 		songs, err := client.GetRandomSongs(map[string]string{"size": "1"})
 		if err != nil || len(songs) == 0 {
-			return fmt.Errorf("failed to get random songs: %w", err)
+			return nil, fmt.Errorf("failed to get random songs: %w", err)
 		}
 
 		targetSong = songs[0]
@@ -103,6 +122,19 @@ func ChangeCurrentTrack(query string) error {
 		rawUser,
 		encodedPassword,
 	)
+
+	return &RequestedTrack{
+		StreamURL: streamURL,
+		Title:     targetSong.Title,
+		Artist:    targetSong.Artist,
+	}, nil
+}
+
+// playStreamURL charge l'URL de flux dans Lavalink et lance la lecture. C'est le
+// point de passage unique de tout changement de morceau : les votes de skip y
+// sont réinitialisés.
+func playStreamURL(streamURL string) error {
+	resetSkipVotes()
 
 	player := Link.Player(snowflake.MustParse(os.Getenv("GUILD_ID")))
 

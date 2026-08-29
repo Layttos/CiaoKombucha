@@ -178,6 +178,8 @@ func main() {
 	RegisterCommand(&Command.Say{})
 	if os.Getenv("ENABLE_RADIO") == "true" {
 		RegisterCommand(&Command.RadioSearch{})
+		RegisterCommand(&Command.Skip{})
+		RegisterCommand(&Command.Play{})
 	}
 
 	err = dg.Open()
@@ -192,7 +194,7 @@ func main() {
 			case lavalink.TrackEndEvent:
 				if e.Reason == lavalink.TrackEndReasonFinished {
 					fmt.Println("Track finished playing. Attempting to play the next track...")
-					go ConnectToRadioChannel(dg)
+					go Radio.AdvanceTrack(dg)
 				}
 			}
 		}),
