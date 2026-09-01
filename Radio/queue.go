@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 
+	"bot.ciaokombucha.tv/Utils"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -62,9 +63,19 @@ func QueueLength() int {
 // le prochain morceau demandé via /play s'il y en a un, sinon reprendre la radio
 // normale (morceau aléatoire).
 func AdvanceTrack(s *discordgo.Session) {
+	// Un morceau se termine souvent pendant une coupure de la gateway : sans ce
+	// garde-fou, le (re)join vocal ci-dessous écrirait sur un websocket fermé et
+	// ferait tomber le bot. La radio repart d'elle-même à la reconnexion.
+	if !Utils.GatewayConnected(s) {
+		fmt.Println("Gateway Discord injoignable : passage au morceau suivant reporté.")
+		return
+	}
+
 	next, ok := dequeueRequest()
 	if !ok {
-		ConnectToRadioChannel(s)
+		if err := ConnectToRadioChannel(s); err != nil {
+			fmt.Println("An error occurred while attempting to resume the radio:", err)
+		}
 		return
 	}
 
@@ -74,6 +85,8 @@ func AdvanceTrack(s *discordgo.Session) {
 
 	if err := playStreamURL(next.StreamURL); err != nil {
 		fmt.Println("Queued request failed, falling back to the radio:", err)
-		ConnectToRadioChannel(s)
+		if err := ConnectToRadioChannel(s); err != nil {
+			fmt.Println("An error occurred while attempting to resume the radio:", err)
+		}
 	}
 }

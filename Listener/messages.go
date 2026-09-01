@@ -15,15 +15,24 @@ func MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	query := `INSERT OR IGNORE INTO messages (id, channel_id, content, author_id) VALUES(?, ?, ?, ?);`
-	stmt, _ := Utils.DB.Prepare(query)
-	defer stmt.Close()
-	_, err := stmt.Exec(m.Message.ID, m.Message.ChannelID, m.Content, m.Author.ID)
+	stmt, err := Utils.DB.Prepare(query)
 	if err != nil {
+		fmt.Println("An error occured while attemping to prepare the message insertion:", err)
+		return
+	}
+	defer stmt.Close()
+	if _, err := stmt.Exec(m.Message.ID, m.Message.ChannelID, m.Content, m.Author.ID); err != nil {
 		fmt.Println("An error occured when a user sent a message:", err)
 	}
 }
 
 func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
+	// Discord émet aussi un MESSAGE_UPDATE partiel, sans auteur, lorsqu'il
+	// ajoute de lui-même un embed à un message (aperçu de lien par exemple).
+	if m.Author == nil || s.State == nil || s.State.User == nil {
+		return
+	}
+
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
@@ -43,10 +52,13 @@ func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 	}
 
 	update_query := `UPDATE messages SET content=? WHERE id=?`
-	stmt, _ := Utils.DB.Prepare(update_query)
-	defer stmt.Close()
-	_, err = stmt.Exec(m.Message.Content, m.Message.ID)
+	stmt, err := Utils.DB.Prepare(update_query)
 	if err != nil {
+		fmt.Println("An error occured while attemping to prepare the message update:", err)
+		return
+	}
+	defer stmt.Close()
+	if _, err := stmt.Exec(m.Message.Content, m.Message.ID); err != nil {
 		fmt.Println("An error occured when the program attempted to update the message in the database:", err)
 		return
 	}
@@ -55,14 +67,9 @@ func MessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 		return
 	}
 
-	user, _ := s.User(m.Author.ID)
-	avatarURL := m.Message.Author.AvatarURL("")
 	embed := &discordgo.MessageEmbed{
-		Author: &discordgo.MessageEmbedAuthor{
-			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
-		},
-		Title: ":droplet: Modification de message",
+		Author: Utils.ActorEmbedAuthor(s, m.Author.ID),
+		Title:  ":droplet: Modification de message",
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:   "Avant",

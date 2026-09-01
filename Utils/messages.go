@@ -9,13 +9,8 @@ import (
 )
 
 func AlertChannelMembers(s *discordgo.Session, memberID string, title string, content string) {
-	user, _ := s.User(memberID)
-	avatarURL := user.AvatarURL("")
 	s.ChannelMessageSendEmbed(os.Getenv("USER_CHANNEL_ID"), &discordgo.MessageEmbed{
-		Author: &discordgo.MessageEmbedAuthor{
-			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
-		},
+		Author:      ActorEmbedAuthor(s, memberID),
 		Title:       title,
 		Color:       0xC7A49D,
 		Description: content,
@@ -28,13 +23,8 @@ func AlertChannelMembers(s *discordgo.Session, memberID string, title string, co
 }
 
 func AlertLevelsChannel(s *discordgo.Session, memberID string, title string, content string) {
-	user, _ := s.User(memberID)
-	avatarURL := user.AvatarURL("")
 	s.ChannelMessageSendEmbed(os.Getenv("LEVELS_CHANNEL_ID"), &discordgo.MessageEmbed{
-		Author: &discordgo.MessageEmbedAuthor{
-			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
-		},
+		Author:      ActorEmbedAuthor(s, memberID),
 		Title:       title,
 		Color:       0x2F75A1,
 		Description: content,
@@ -55,14 +45,8 @@ func AlertChannelMembersComplex(s *discordgo.Session, embed *discordgo.MessageEm
 }
 
 func AlertChannelMessages(s *discordgo.Session, memberID string, title string, content string) {
-	//member, _ := s.State.Member(os.Getenv("GUILD_ID"), memberID)
-	user, _ := s.User(memberID)
-	avatarURL := user.AvatarURL("")
 	s.ChannelMessageSendEmbed(os.Getenv("MESSAGES_CHANNEL_ID"), &discordgo.MessageEmbed{
-		Author: &discordgo.MessageEmbedAuthor{
-			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
-		},
+		Author:      ActorEmbedAuthor(s, memberID),
 		Title:       title,
 		Color:       0x4A5B85,
 		Description: content,
@@ -75,19 +59,12 @@ func AlertChannelMessages(s *discordgo.Session, memberID string, title string, c
 }
 
 func AlertChannelMessagesComplex(s *discordgo.Session, embed *discordgo.MessageEmbed) {
-	//member, _ := s.State.Member(os.Getenv("GUILD_ID"), memberID)
 	s.ChannelMessageSendEmbed(os.Getenv("MESSAGES_CHANNEL_ID"), embed)
 }
 
 func AlertChannelModeration(s *discordgo.Session, memberID string, title string, content string) {
-	//member, _ := s.State.Member(os.Getenv("GUILD_ID"), memberID)
-	user, _ := s.User(memberID)
-	avatarURL := user.AvatarURL("")
 	s.ChannelMessageSendEmbed(os.Getenv("MODERATION_CHANNEL_ID"), &discordgo.MessageEmbed{
-		Author: &discordgo.MessageEmbedAuthor{
-			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
-		},
+		Author:      ActorEmbedAuthor(s, memberID),
 		Title:       title,
 		Color:       0x7B53A3,
 		Description: content,
@@ -100,7 +77,6 @@ func AlertChannelModeration(s *discordgo.Session, memberID string, title string,
 }
 
 func AlertChannelModerationComplex(s *discordgo.Session, embed *discordgo.MessageEmbed) {
-	//member, _ := s.State.Member(os.Getenv("GUILD_ID"), memberID)
 	s.ChannelMessageSendEmbed(os.Getenv("MODERATION_CHANNEL_ID"), embed)
 }
 
@@ -238,27 +214,27 @@ func ResolveAuditActorAny(s *discordgo.Session, guildID string, targetID string,
 
 // auditChangeLabels traduit les clés d'audit log Discord les plus courantes.
 var auditChangeLabels = map[string]string{
-	"name":                     "Nom",
-	"icon_hash":                "Icône",
-	"splash_hash":              "Image d'invitation",
-	"discovery_splash_hash":    "Image de découverte",
-	"banner_hash":              "Bannière",
-	"owner_id":                 "Propriétaire",
-	"region":                   "Région vocale",
-	"afk_channel_id":           "Salon AFK",
-	"afk_timeout":              "Délai AFK",
-	"rules_channel_id":         "Salon des règles",
-	"public_updates_channel_id": "Salon des annonces communautaires",
-	"system_channel_id":        "Salon système",
-	"widget_enabled":           "Widget activé",
-	"verification_level":       "Niveau de vérification",
+	"name":                          "Nom",
+	"icon_hash":                     "Icône",
+	"splash_hash":                   "Image d'invitation",
+	"discovery_splash_hash":         "Image de découverte",
+	"banner_hash":                   "Bannière",
+	"owner_id":                      "Propriétaire",
+	"region":                        "Région vocale",
+	"afk_channel_id":                "Salon AFK",
+	"afk_timeout":                   "Délai AFK",
+	"rules_channel_id":              "Salon des règles",
+	"public_updates_channel_id":     "Salon des annonces communautaires",
+	"system_channel_id":             "Salon système",
+	"widget_enabled":                "Widget activé",
+	"verification_level":            "Niveau de vérification",
 	"default_message_notifications": "Notifications par défaut",
-	"explicit_content_filter":  "Filtre de contenu explicite",
-	"mfa_level":                "Double authentification requise",
-	"vanity_url_code":          "URL personnalisée",
-	"preferred_locale":         "Langue principale",
-	"description":              "Description",
-	"premium_progress_bar_enabled": "Barre de progression des boosts",
+	"explicit_content_filter":       "Filtre de contenu explicite",
+	"mfa_level":                     "Double authentification requise",
+	"vanity_url_code":               "URL personnalisée",
+	"preferred_locale":              "Langue principale",
+	"description":                   "Description",
+	"premium_progress_bar_enabled":  "Barre de progression des boosts",
 }
 
 // FormatAuditChanges met en forme la liste des changements d'une entrée d'audit

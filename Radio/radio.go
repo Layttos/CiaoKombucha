@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"bot.ciaokombucha.tv/Utils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/delucks/go-subsonic"
 	"github.com/disgoorg/disgolink/v3/disgolink"
@@ -44,6 +45,10 @@ func ConnectToRadioChannel(s *discordgo.Session) error {
 
 	if !client.Ping() {
 		return fmt.Errorf("Failed to ping the Navidrome server. Please check the URL and credentials stored in the .env file.")
+	}
+
+	if !Utils.GatewayConnected(s) {
+		return fmt.Errorf("gateway Discord injoignable : connexion au salon radio reportée")
 	}
 
 	fmt.Println("Attempting to join the radio channel, " + os.Getenv("RADIO_CHANNEL_ID"))
@@ -136,9 +141,22 @@ func resolveTrack(query string) (*RequestedTrack, error) {
 func playStreamURL(streamURL string) error {
 	resetSkipVotes()
 
-	player := Link.Player(snowflake.MustParse(os.Getenv("GUILD_ID")))
+	if Link == nil {
+		return fmt.Errorf("lavalink n'est pas initialisé")
+	}
 
-	result, err := Link.BestNode().LoadTracks(context.TODO(), streamURL)
+	node := Link.BestNode()
+	if node == nil {
+		return fmt.Errorf("aucun nœud Lavalink disponible")
+	}
+
+	guildID, err := snowflake.Parse(os.Getenv("GUILD_ID"))
+	if err != nil {
+		return fmt.Errorf("GUILD_ID invalide : %w", err)
+	}
+	player := Link.Player(guildID)
+
+	result, err := node.LoadTracks(context.TODO(), streamURL)
 	if err != nil {
 		return fmt.Errorf("lavalink connection error: %w", err)
 	}

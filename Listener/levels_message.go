@@ -16,10 +16,12 @@ func LevelsMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	err := Utils.DB.QueryRow(query, user_id).Scan(&current_level, &current_experience)
 	if err != nil {
 		insert_query := `INSERT INTO levels (user_id, experience, level) VALUES(?, ?, ?);`
-		stmt, _ := Utils.DB.Prepare(insert_query)
-		defer stmt.Close()
-		_, err = stmt.Exec(user_id, 0, 0)
+		stmt, err := Utils.DB.Prepare(insert_query)
 		if err != nil {
+			return
+		}
+		defer stmt.Close()
+		if _, err := stmt.Exec(user_id, 0, 0); err != nil {
 			return
 		}
 	}

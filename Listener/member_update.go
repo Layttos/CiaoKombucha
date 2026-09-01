@@ -180,8 +180,6 @@ func handleTimeoutChange(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
 
 func MemberBanned(s *discordgo.Session, m *discordgo.GuildBanAdd) {
 	time.Sleep(500 * time.Millisecond)
-	user, _ := s.User(m.User.ID)
-	avatarURL := user.AvatarURL("")
 
 	auditLog, err := s.GuildAuditLog(m.GuildID, "", "", 22 /* (c.f discordgo.AuditLogActionMemberBanAdd)*/, 1)
 
@@ -191,7 +189,7 @@ func MemberBanned(s *discordgo.Session, m *discordgo.GuildBanAdd) {
 
 	moderator_id := "Non Spécifié(e)"
 	reason := "Non Spécifié(e)"
-	if len(auditLog.AuditLogEntries) > 0 {
+	if auditLog != nil && len(auditLog.AuditLogEntries) > 0 {
 		entry := auditLog.AuditLogEntries[0]
 		if entry.TargetID == m.User.ID {
 			moderator_id = entry.UserID
@@ -208,11 +206,8 @@ func MemberBanned(s *discordgo.Session, m *discordgo.GuildBanAdd) {
 	}
 
 	embed := &discordgo.MessageEmbed{
-		Author: &discordgo.MessageEmbedAuthor{
-			IconURL: avatarURL,
-			Name:    user.GlobalName + " (@" + user.Username + ")",
-		},
-		Title: ":tools: Membre banni(e)",
+		Author: Utils.ActorEmbedAuthor(s, m.User.ID),
+		Title:  ":tools: Membre banni(e)",
 		Fields: []*discordgo.MessageEmbedField{
 			{
 				Name:   "Modérateur",
@@ -243,8 +238,6 @@ func MemberBanned(s *discordgo.Session, m *discordgo.GuildBanAdd) {
 
 func MemberKicked(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
 	time.Sleep(500 * time.Millisecond)
-	user, _ := s.User(m.User.ID)
-	avatarURL := user.AvatarURL("")
 
 	auditLog, err := s.GuildAuditLog(m.GuildID, "", "", 20 /* (c.f discordgo.AuditLogActionMemberKick)*/, 1)
 
@@ -255,7 +248,7 @@ func MemberKicked(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
 	moderator_id := "Non Spécifié(e)"
 	reason := "Non Spécifié(e)"
 	was_kicked := false
-	if len(auditLog.AuditLogEntries) > 0 {
+	if auditLog != nil && len(auditLog.AuditLogEntries) > 0 {
 		entry := auditLog.AuditLogEntries[0]
 		if entry.TargetID == m.User.ID {
 			was_kicked = true
@@ -276,11 +269,8 @@ func MemberKicked(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
 		}
 
 		embed := &discordgo.MessageEmbed{
-			Author: &discordgo.MessageEmbedAuthor{
-				IconURL: avatarURL,
-				Name:    user.GlobalName + " (@" + user.Username + ")",
-			},
-			Title: ":tools: Membre expulsé(e)",
+			Author: Utils.ActorEmbedAuthor(s, m.User.ID),
+			Title:  ":tools: Membre expulsé(e)",
 			Fields: []*discordgo.MessageEmbedField{
 				{
 					Name:   "Modérateur",
