@@ -133,43 +133,43 @@ func main() {
 	dg.State.TrackVoice = true
 
 	// Member Handler
-	dg.AddHandler(Listener.MemberUpdate)
-	dg.AddHandler(Listener.MemberUpdateTag)
-	dg.AddHandler(Listener.MemberBanned)
-	dg.AddHandler(Listener.MemberKicked)
-	dg.AddHandler(Listener.MemberJoin)
-	dg.AddHandler(Listener.MemberQuit)
+	dg.AddHandler(safeHandler(Listener.MemberUpdate))
+	dg.AddHandler(safeHandler(Listener.MemberUpdateTag))
+	dg.AddHandler(safeHandler(Listener.MemberBanned))
+	dg.AddHandler(safeHandler(Listener.MemberKicked))
+	dg.AddHandler(safeHandler(Listener.MemberJoin))
+	dg.AddHandler(safeHandler(Listener.MemberQuit))
 
 	// Message Handler
-	dg.AddHandler(Listener.MessageUpdate)
-	dg.AddHandler(Listener.MessageCreate)
-	dg.AddHandler(Listener.MessageDelete)
-	dg.AddHandler(Listener.MessageDeleteBulk)
-	dg.AddHandler(Listener.RolesReactionsAdd)
-	dg.AddHandler(Listener.RolesReactionsRemove)
+	dg.AddHandler(safeHandler(Listener.MessageUpdate))
+	dg.AddHandler(safeHandler(Listener.MessageCreate))
+	dg.AddHandler(safeHandler(Listener.MessageDelete))
+	dg.AddHandler(safeHandler(Listener.MessageDeleteBulk))
+	dg.AddHandler(safeHandler(Listener.RolesReactionsAdd))
+	dg.AddHandler(safeHandler(Listener.RolesReactionsRemove))
 
 	// Server structure Handler (rôles, salons, fils, paramètres, webhooks, invitations, emojis)
-	dg.AddHandler(Listener.RoleCreated)
-	dg.AddHandler(Listener.RoleUpdated)
-	dg.AddHandler(Listener.RoleDeleted)
-	dg.AddHandler(Listener.ChannelCreated)
-	dg.AddHandler(Listener.ChannelUpdated)
-	dg.AddHandler(Listener.ChannelDeleted)
-	dg.AddHandler(Listener.ThreadCreated)
-	dg.AddHandler(Listener.ThreadDeleted)
-	dg.AddHandler(Listener.GuildUpdated)
-	dg.AddHandler(Listener.GuildEmojisUpdated)
-	dg.AddHandler(Listener.MemberUnbanned)
-	dg.AddHandler(Listener.WebhooksUpdated)
-	dg.AddHandler(Listener.InviteCreated)
-	dg.AddHandler(Listener.InviteDeleted)
+	dg.AddHandler(safeHandler(Listener.RoleCreated))
+	dg.AddHandler(safeHandler(Listener.RoleUpdated))
+	dg.AddHandler(safeHandler(Listener.RoleDeleted))
+	dg.AddHandler(safeHandler(Listener.ChannelCreated))
+	dg.AddHandler(safeHandler(Listener.ChannelUpdated))
+	dg.AddHandler(safeHandler(Listener.ChannelDeleted))
+	dg.AddHandler(safeHandler(Listener.ThreadCreated))
+	dg.AddHandler(safeHandler(Listener.ThreadDeleted))
+	dg.AddHandler(safeHandler(Listener.GuildUpdated))
+	dg.AddHandler(safeHandler(Listener.GuildEmojisUpdated))
+	dg.AddHandler(safeHandler(Listener.MemberUnbanned))
+	dg.AddHandler(safeHandler(Listener.WebhooksUpdated))
+	dg.AddHandler(safeHandler(Listener.InviteCreated))
+	dg.AddHandler(safeHandler(Listener.InviteDeleted))
 
 	// Command Manager
-	dg.AddHandler(Command.CommandManager)
+	dg.AddHandler(safeHandler(Command.CommandManager))
 
-	dg.AddHandler(Listener.LevelsMessageCreate)
-	dg.AddHandler(Listener.AntiBotListener)
-	dg.AddHandler(Listener.EmailBotJoin)
+	dg.AddHandler(safeHandler(Listener.LevelsMessageCreate))
+	dg.AddHandler(safeHandler(Listener.AntiBotListener))
+	dg.AddHandler(safeHandler(Listener.EmailBotJoin))
 
 	RegisterCommand(&Command.Role{})
 	RegisterCommand(&Command.Levels{})
@@ -182,9 +182,12 @@ func main() {
 		RegisterCommand(&Command.Play{})
 	}
 
-	err = dg.Open()
-	if err != nil {
-		fmt.Println("An error occured while attemping to start the discord bot:", err)
+	if err := openSession(dg); err != nil {
+		log.Fatal("An error occured while attemping to start the discord bot: ", err)
+	}
+
+	if dg.State == nil || dg.State.User == nil {
+		log.Fatal("Discord n'a pas renvoyé de paquet READY exploitable : identité du bot inconnue.")
 	}
 
 	/*  ==== LAVALINK ==== */
@@ -194,7 +197,9 @@ func main() {
 			case lavalink.TrackEndEvent:
 				if e.Reason == lavalink.TrackEndReasonFinished {
 					fmt.Println("Track finished playing. Attempting to play the next track...")
-					go Radio.AdvanceTrack(dg)
+					Utils.SafeGo("le passage au morceau suivant", func() {
+						Radio.AdvanceTrack(dg)
+					})
 				}
 			}
 		}),
@@ -211,25 +216,38 @@ func main() {
 			return
 		}
 
-		dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceServerUpdate) {
-			Radio.Link.OnVoiceServerUpdate(context.TODO(), snowflake.MustParse(e.GuildID), e.Token, e.Endpoint)
-		})
+		dg.AddHandler(safeHandler(func(s *discordgo.Session, e *discordgo.VoiceServerUpdate) {
+			guildID, err := snowflake.Parse(e.GuildID)
+			if Radio.Link == nil || err != nil {
+				return
+			}
+
+			Radio.Link.OnVoiceServerUpdate(context.TODO(), guildID, e.Token, e.Endpoint)
+		}))
 
 		// 2. Forwards your Bot's Voice Session ID to Lavalink
-		dg.AddHandler(func(s *discordgo.Session, e *discordgo.VoiceStateUpdate) {
+		dg.AddHandler(safeHandler(func(s *discordgo.Session, e *discordgo.VoiceStateUpdate) {
 			// Only forward updates for our own bot
-			if e.UserID != s.State.User.ID {
+			if Radio.Link == nil || s.State == nil || s.State.User == nil || e.UserID != s.State.User.ID {
+				return
+			}
+
+			guildID, err := snowflake.Parse(e.GuildID)
+			if err != nil {
 				return
 			}
 
 			var channelID *snowflake.ID
 			if e.ChannelID != "" {
-				id := snowflake.MustParse(e.ChannelID)
+				id, err := snowflake.Parse(e.ChannelID)
+				if err != nil {
+					return
+				}
 				channelID = &id
 			}
 
-			Radio.Link.OnVoiceStateUpdate(context.TODO(), snowflake.MustParse(e.GuildID), channelID, e.SessionID)
-		})
+			Radio.Link.OnVoiceStateUpdate(context.TODO(), guildID, channelID, e.SessionID)
+		}))
 	}
 	/*  ==== LAVALINK ==== */
 
@@ -244,6 +262,8 @@ func main() {
 	if os.Getenv("ENABLE_TEANO_DAILY") == "true" {
 		go func() {
 			sendDaily := func() {
+				defer Utils.RecoverPanic("le Teano daily")
+
 				now := time.Now()
 				first := time.Date(2026, 7, 29, 0, 0, 0, 0, now.Location())
 				today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -267,6 +287,8 @@ func main() {
 			}
 		}()
 	}
+
+	startGatewayWatchdog(dg)
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
