@@ -16,7 +16,6 @@ import (
 	"bot.ciaokombucha.tv/Utils"
 	"github.com/bwmarrin/discordgo"
 	"github.com/disgoorg/disgolink/v3/disgolink"
-	"github.com/disgoorg/disgolink/v3/lavalink"
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/joho/godotenv"
 
@@ -192,17 +191,9 @@ func main() {
 
 	/*  ==== LAVALINK ==== */
 	if os.Getenv("ENABLE_RADIO") == "true" {
-		Radio.Link = disgolink.New(snowflake.MustParse(dg.State.User.ID), disgolink.WithListenerFunc(func(player disgolink.Player, event lavalink.Event) {
-			switch e := event.(type) {
-			case lavalink.TrackEndEvent:
-				if e.Reason == lavalink.TrackEndReasonFinished {
-					fmt.Println("Track finished playing. Attempting to play the next track...")
-					Utils.SafeGo("le passage au morceau suivant", func() {
-						Radio.AdvanceTrack(dg)
-					})
-				}
-			}
-		}),
+		Radio.Link = disgolink.New(
+			snowflake.MustParse(dg.State.User.ID),
+			disgolink.WithListenerFunc(Radio.LavalinkEventHandler(dg)),
 		)
 
 		_, err = Radio.Link.AddNode(context.TODO(), disgolink.NodeConfig{
@@ -255,6 +246,7 @@ func main() {
 	LoadCommands(dg)
 	if os.Getenv("ENABLE_RADIO") == "true" {
 		ConnectToRadioChannel(dg)
+		Radio.StartWatchdog(dg)
 	}
 
 	/* ==== TEANO DAILY ==== */

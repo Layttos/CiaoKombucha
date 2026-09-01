@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"bot.ciaokombucha.tv/Radio"
+	"bot.ciaokombucha.tv/Utils"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -74,7 +75,9 @@ func (c *Skip) Execute(s *discordgo.Session, i *discordgo.InteractionCreate) boo
 	}
 
 	// Seuil atteint : on avance dans la file (prochain /play ou radio aléatoire).
-	go Radio.AdvanceTrack(s)
+	Utils.SafeGo("le passage au morceau suivant demandé par /skip", func() {
+		Radio.AdvanceTrack(s)
+	})
 
 	radioRespond(s, i, fmt.Sprintf("⏭️ Musique passée (%d/%d votes).", tally, needed), false)
 	return true
